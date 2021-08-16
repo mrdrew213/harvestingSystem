@@ -4,6 +4,7 @@ import logging.handlers
 from datetime import datetime, timedelta
 from harvestingStateMachine import harvestingStateMachine
 from read_inputs import read_inputs
+from input_masks import is_watering, is_collecting, is_full, is_charged 
 
 # https://www.raspberrypi.org/documentation/linux/usage/systemd.md
 
@@ -39,62 +40,77 @@ class harvestingStateMachineManagement(object):
         self.inputState = 0
         self.prevInputState = [0,0,0,0,0]
         self.prevState = "HelloWorld"
-        self.collectStartTime = datetime.now() + timedelta(minutes=1)
-        self.collectWatchDog = datetime.now()
-        self.dispenseWatchDog = datetime.now()
+        self.collectStartTime = datetime.now() + timedelta(minutes=90)
 
 def main():
     m=harvestingStateMachineManagement("harvestControllerManager") 
     h=harvestingStateMachine("harvestController")
     while 1:
         m.inputState = read_inputs()
+        h.read_inputs(m.inputState) 
         print("%s, %02x, %s, %s" % (h.state, m.inputState[0],  \
             m.collectStartTime.strftime("%m/%d/%Y, %H:%M:%S"), \
             datetime.now().strftime("%m/%d/%Y, %H:%M:%S")))
 	if h.is_idle():
-            if m.inputState[0] & 0x08 == 0x00:
+            if is_watering(m.inputState[0]):
                 log.debug("water state detected, go to water monitoring state")
                 h.water()
-            elif m.prevState != "idle":
-                log.debug("collection scheduled to start <n> min after adequate charge detected") 
-                m.collectStartTime = datetime.now() + timedelta(minutes=60)
-            elif m.inputState[0] & 0x01 != 0x01:
-                m.collectStartTime = datetime.now() + timedelta(minutes=60)
-            elif datetime.now() > m.collectStartTime:
-                log.debug("collect state triggered, go collect") 
+            elif is_collecting(m.inputState[0]):
+                log.debug("manual collection state detected, go to manual collection state")
                 h.collect()
-                m.collectWatchDog = datetime.now() + timedelta(minutes=15)
-        elif h.is_watering():	
-            if m.inputState[0] & 0x08 == 0x08:
-                log.debug("watering stopped, go idle") 
+            elif m.collectStartTime < datetime.now():
+                m.collectStartTime = datetime.now() + timedelta(minutes=90)
+                log.debug("collect state triggered, go collect") 
+                h.collectSch()
+        elif h.is_charging():
+            if is_charged(m.inputState[0]):
                 h.idle()
-            elif m.inputState[0] & 0x05 == 0x04:
+                m.collectStartTime = datetime.now() + timedelta(minutes=90)
+                log.debug("charge looks good")
+	    else:
+                m.collectStartTime = datetime.now() + timedelta(minutes=90)
+                if m.prevState != "charging":
+                    log.debug("deficient charge, pushing start time out")
+        elif h.is_watering():	
+            if is_collecting(m.inputState[0]):
+                log.debug("collecting state detected, go collect") 
+                h.collect()
+            elif not is_watering(m.inputState[0]):
+                log.debug("watering stopped, go charge") 
+                h.charge()
+            elif not is_charged(m.inputState[0]):
                 log.debug("deficient charge detected, go to dispense state")
                 h.dispense()   
-                m.dispenseWatchDog = datetime.now() + timedelta(seconds=90) 
+        elif h.is_collecting():	
+            if not is_collecting(m.inputState[0]):
+                log.debug("collecting state stopped, go charge") 
+                h.charge()
+            elif is_watering(m.inputState[0]):
+                log.debug("watering started, go water") 
+                h.water()
         elif h.is_dispensing():
-            if m.inputState[0] & 0x08 == 0x08:
-                log.debug("watering state ended, go idle")
-                h.idle()
-            elif m.inputState[0] & 0x01 == 0x01:
-                log.debug("proper charge level detected, go idle")
-                h.idle()   
-            elif m.dispenseWatchDog < datetime.now():
-                log.debug("dispense watchdog triggered, go idle")
-                h.idle() 
-        elif h.is_collecting():
-            if m.inputState[0] & 0x08 == 0x00:
-                log.debug("watering state triggered, go idle")
-                h.idle()
-            elif m.inputState[0] & 0x02 == 0x00:
-	    	log.debug("tank full state detected, go idle")
-                h.idle()
-            elif m.inputState[0] & 0x01 == 0x00:
-		log.debug("deficient charge detected, go idle")
-                h.idle()
-            elif m.collectWatchDog < datetime.now():
-                log.debug("collect watchdog triggered, go idle")
-                h.idle() 
+            if not is_watering(m.inputState[0]):
+                log.debug("watering stopped, go charge") 
+                h.charge()
+            elif is_collecting(m.inputState[0]):
+                log.debug("collecting state detected, go collect") 
+                h.collect()
+            elif is_charged(m.inputState[0]):
+                log.debug("proper charge level detected, go water")
+                h.water()   
+        elif h.is_collectingSch():
+            if is_collecting(m.inputState[0]):
+                log.debug("manual collect state detected, go collect") 
+                h.collect()
+            elif is_watering(m.inputState[0]):
+                log.debug("watering started, go water")
+                h.water()
+            elif not is_charged(m.inputState[0]):
+                log.debug("deficient charge, go charge")
+                h.charge()
+            elif is_full(m.inputState[0]):
+	    	log.debug("tank full state detected, go charge")
+                h.charge()
         if m.prevInputState[0] != m.inputState[0]:
             log.debug("Input Pins; Prev,Curr: %02x,%02x" % (m.prevInputState[0], m.inputState[0]))
         m.prevInputState = m.inputState

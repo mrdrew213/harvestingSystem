@@ -1,5 +1,6 @@
 from transitions import Machine
 import RPi.GPIO as GPIO
+from input_masks import is_watering, is_collecting, is_full, is_charged
 import random, time
 
 # Pin Definitons:
@@ -18,7 +19,7 @@ ch4 = 21 #
 class harvestingStateMachine(object):
 
     # Define some states. 
-    states = ['idle', 'watering', 'dispensing', 'collecting']
+    states = ['idle', 'watering', 'collecting', 'dispensing', 'collectingSch', 'charging']
    
     # Pin Definitons:
     ch1 = 12 # master_valve
@@ -37,33 +38,44 @@ class harvestingStateMachine(object):
         self.watering_count = 0
         self.dispensing_count = 0
 
+        #inout pins
+        self.ins = 0
+
         # Initialize the state machine
         self.machine = Machine(model=self, states=harvestingStateMachine.states, initial='idle')
 
-        # The controller will turn on
-        self.machine.add_transition(trigger='water', source=['idle','dispensing'], dest='watering', before='wateringOn')
-
-        # We want to dispense water too
-        self.machine.add_transition('dispense', 'watering', 'dispensing', before='dispensingOn')
-        
-	# Time to reclaim some water
-        self.machine.add_transition('collect', 'idle', 'collecting', before='collectingOn')
-
 	# Initialize the state machine
         self.machine.add_transition('idle', '*', 'idle', before=['collectingOff', 'dispensingOff'])
+
+        # The controller will turn on
+        self.machine.add_transition(trigger='water', source='*', dest='watering', before=['collectingOff', 'dispensingOff', 'wateringOn'])
+
+        # The controller will also collect on its own
+        self.machine.add_transition(trigger='collect', source='*', dest='collecting', before=['collectingOff', 'dispensingOff'])
+        
+        # We want to dispense water too
+        self.machine.add_transition('dispense', 'watering', 'dispensing', before='dispensingOn')
+
+	# Time to reclaim some water
+        self.machine.add_transition('collectSch', 'idle',  'collectingSch', before='collectingOn')
+
+	# Time to charge
+        self.machine.add_transition('charge', ['idle', 'watering', 'collecting', 'collectingSch', 'dispensing'], 'charging', before=['collectingOff','dispensingOff'])
 
     def wateringOn(self):
         self.watering_count += 1
 
     def collectingOn(self):
-        self.collecting_count += 1
-        print("before=collectingOn")
-        GPIO.output(ch1, GPIO.HIGH)
-        time.sleep(2)
-        GPIO.output(ch2, GPIO.HIGH)
+        if not is_full(self.ins[0]):
+            self.collecting_count += 1
+            print("before=collectingOn")
+            GPIO.output(ch1, GPIO.HIGH)
+            time.sleep(2)
+            GPIO.output(ch2, GPIO.HIGH)
+        else:
+            print("tank full, skipping it")
 
     def collectingOff(self):
-        print("after=collectingOff")
         GPIO.output(ch2, GPIO.LOW)
         time.sleep(2)
         GPIO.output(ch1, GPIO.LOW)
@@ -76,4 +88,7 @@ class harvestingStateMachine(object):
     def dispensingOff(self):
         print("after=dispensingOff")
         GPIO.output(ch3, GPIO.LOW)
+
+    def read_inputs(self, ins):
+        self.ins = ins
 

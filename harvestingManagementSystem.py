@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from harvestingStateMachine import harvestingStateMachine
 from read_inputs import read_inputs
 from input_masks import is_watering, is_collecting, is_full, is_charged 
+from read_yaml import readYaml
 
 # https://www.raspberrypi.org/documentation/linux/usage/systemd.md
 
@@ -41,6 +42,7 @@ class harvestingStateMachineManagement(object):
         self.prevInputState = [0,0,0,0,0]
         self.prevState = "HelloWorld"
         self.collectStartTime = datetime.now() + timedelta(minutes=90)
+        self.chargeTime = 90
 
 def main():
     m=harvestingStateMachineManagement("harvestControllerManager") 
@@ -52,23 +54,27 @@ def main():
             m.collectStartTime.strftime("%m/%d/%Y, %H:%M:%S"), \
             datetime.now().strftime("%m/%d/%Y, %H:%M:%S")))
 	if h.is_idle():
-            if is_watering(m.inputState[0]):
+            if m.prevState != "idle":
+                data=readYaml()
+                log.debug("%s" % data)
+                m.chargeTime=data["chargeTime"]
+            elif is_watering(m.inputState[0]):
                 log.debug("water state detected, go to water monitoring state")
                 h.water()
             elif is_collecting(m.inputState[0]):
                 log.debug("manual collection state detected, go to manual collection state")
                 h.collect()
             elif m.collectStartTime < datetime.now():
-                m.collectStartTime = datetime.now() + timedelta(minutes=90)
+                m.collectStartTime = datetime.now() + timedelta(minutes=m.chargeTime)
                 log.debug("collect state triggered, go collect") 
                 h.collectSch()
         elif h.is_charging():
             if is_charged(m.inputState[0]):
                 h.idle()
-                m.collectStartTime = datetime.now() + timedelta(minutes=90)
+                m.collectStartTime = datetime.now() + timedelta(minutes=m.chargeTime)
                 log.debug("charge looks good")
 	    else:
-                m.collectStartTime = datetime.now() + timedelta(minutes=90)
+                m.collectStartTime = datetime.now() + timedelta(minutes=m.chargeTime)
                 if m.prevState != "charging":
                     log.debug("deficient charge, pushing start time out")
         elif h.is_watering():	

@@ -3,7 +3,7 @@ import time, logging
 import logging.handlers
 from datetime import datetime, timedelta
 from harvestingStateMachine import harvestingStateMachine
-from read_inputs import read_inputs
+from read_inputs import read_inputs, read_inputs_st
 from input_masks import is_watering, is_collecting, is_full, is_charged 
 from read_yaml import readYaml
 
@@ -43,21 +43,27 @@ class harvestingStateMachineManagement(object):
         self.prevState = "HelloWorld"
         self.collectStartTime = datetime.now() + timedelta(minutes=90)
         self.chargeTime = 90
+        self.dispenseTime = 45 
+        self.prevElapsed = 0
 
 def main():
     m=harvestingStateMachineManagement("harvestControllerManager") 
     h=harvestingStateMachine("harvestController")
+    i=0
     while 1:
         m.inputState = read_inputs()
         h.read_inputs(m.inputState) 
-        print("%s, %02x, %s, %s" % (h.state, m.inputState[0],  \
-            m.collectStartTime.strftime("%m/%d/%Y, %H:%M:%S"), \
-            datetime.now().strftime("%m/%d/%Y, %H:%M:%S")))
+        i=i+1 
+        if ( i%25 == 0) :
+            print("%s, %02x, %s, %s, %d, %d" % (h.state, m.inputState[0],  \
+             m.collectStartTime.strftime("%m/%d/%Y, %H:%M:%S"), \
+             datetime.now().strftime("%m/%d/%Y, %H:%M:%S"), m.chargeTime, m.dispenseTime))
 	if h.is_idle():
             if m.prevState != "idle":
                 data=readYaml()
                 log.debug("%s" % data)
                 m.chargeTime=data["chargeTime"]
+                m.dispenseTime=data["dispenseTime"]
             elif is_watering(m.inputState[0]):
                 log.debug("water state detected, go to water monitoring state")
                 h.water()
@@ -85,6 +91,7 @@ def main():
                 log.debug("watering stopped, go charge") 
                 h.charge()
             elif not is_charged(m.inputState[0]):
+                t = time.time() 
                 log.debug("deficient charge detected, go to dispense state")
                 h.dispense()   
         elif h.is_collecting():	
@@ -95,14 +102,20 @@ def main():
                 log.debug("watering started, go water") 
                 h.water()
         elif h.is_dispensing():
+            elapsed = int(time.time() - t)
             if not is_watering(m.inputState[0]):
                 log.debug("watering stopped, go charge") 
                 h.charge()
             elif is_collecting(m.inputState[0]):
                 log.debug("collecting state detected, go collect") 
                 h.collect()
+            elif (elapsed < m.dispenseTime):
+                if (elapsed % 10 == 0):
+                    if (m.prevElapsed != elapsed): 
+                        log.debug("dispensing, waiting for elapsed time %d, current time %d" % (m.dispenseTime, elapsed))
+                    m.prevElapsed = elapsed  
             elif is_charged(m.inputState[0]):
-                log.debug("proper charge level detected, go water")
+                log.debug("proper charge level detected AND elapsed time is greater than T seconds, go water")
                 h.water()   
         elif h.is_collectingSch():
             if is_collecting(m.inputState[0]):

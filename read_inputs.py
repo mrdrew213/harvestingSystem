@@ -16,6 +16,23 @@ GPIO.setup(in2, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 GPIO.setup(in3, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 GPIO.setup(in4, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
+def read_inputs_st():
+        master = harvest = tank = charge = 0
+        controllerStateLow=0
+        controllerStateHigh=1
+
+        while controllerStateLow != controllerStateHigh:
+             for i in range(sampleRounds):
+                master  += GPIO.input(in1)
+                harvest += GPIO.input(in2)
+                tank += GPIO.input(in3)
+                charge += GPIO.input(in4)
+             controllerStateLow  = (master>sampleRounds/3)<<3   | (harvest>sampleRounds/3)<<2   | (tank>sampleRounds/3) <<1   | (charge>sampleRounds/3)
+             controllerStateHigh = (master>2*sampleRounds/3)<<3 | (harvest>2*sampleRounds/3)<<2 | (tank>2*sampleRounds/3) <<1 | (charge>2*sampleRounds/3)
+             print("%04x, %04x" % (controllerStateLow, controllerStateHigh))
+
+        return controllerStateLow, master, harvest, tank, charge
+
 def read_inputs():
 	master = harvest = tank = charge = 0
 	for i in range(sampleRounds):

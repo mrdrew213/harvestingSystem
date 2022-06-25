@@ -117,6 +117,9 @@ def main():
             elif is_charged(m.inputState[0]):
                 log.debug("proper charge level detected AND elapsed time is greater than T seconds, go water")
                 h.water()   
+            else:
+                log.debug("Error condition: elapsed time is greater than T seconds but proper level NOT DETECTED, go water")
+                h.water()   
         elif h.is_collectingSch():
             if is_collecting(m.inputState[0]):
                 log.debug("manual collect state detected, go collect") 

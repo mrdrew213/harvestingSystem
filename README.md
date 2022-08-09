@@ -14,6 +14,8 @@ Leverage an irrigation timer, rPi, Jet Pump, and 55 gallon drum set (tanks) to c
 
 The solution uses the following system components.
 
+![Alt Text](./SystemArch.JPG)
+
 ### systemD
 
 systemD is used to enable, monitor, and start the system

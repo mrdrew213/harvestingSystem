@@ -1,5 +1,5 @@
 import RPi.GPIO as GPIO
-import time, logging
+import time, logginig, requests
 import logging.handlers
 from datetime import datetime, timedelta
 from harvestingStateMachine import harvestingStateMachine
@@ -44,6 +44,7 @@ class harvestingStateMachineManagement(object):
         self.collectStartTime = datetime.now() + timedelta(minutes=90)
         self.chargeTime = 90
         self.dispenseTime = 45 
+        self.tenDigit = 0
         self.prevElapsed = 0
 
 def main():
@@ -64,6 +65,7 @@ def main():
                 log.debug("%s" % data)
                 m.chargeTime=data["chargeTime"]
                 m.dispenseTime=data["dispenseTime"]
+                m.tenDigit=data["tenDigit"]
             elif is_watering(m.inputState[0]):
                 log.debug("water state detected, go to water monitoring state")
                 h.water()
@@ -119,6 +121,7 @@ def main():
                 h.water()   
             else:
                 log.debug("Error condition: elapsed time is greater than T seconds but proper level NOT DETECTED, go water")
+                requests.post('https://textbelt.com/text', {'phone': m.tenDigit, 'message':'Check water tanks', 'key':'textbelt'}) 
                 h.water()   
         elif h.is_collectingSch():
             if is_collecting(m.inputState[0]):

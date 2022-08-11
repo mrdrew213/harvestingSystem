@@ -3,9 +3,9 @@
 This project empowers people wanting to harvest trickles of water into storage containers for use with a distribution system (e.g. jet pump) to water garden plants and potentially offset water usage in a home.
 
 ![Alt Text](./ecojet110.png)
-![Alt Text](./55GallonDrum.jpg)
+![Alt Text](./55GallonDrum.jpg)  
 ![Alt Text](./b-hyve.jpg)
-![Alt Text](./rpi.jpg)
+![Alt Text](./rpi.jpg)  
 
 # Problem
 

@@ -1,5 +1,5 @@
 import RPi.GPIO as GPIO
-import time, logginig, requests
+import time, logging, requests
 import logging.handlers
 from datetime import datetime, timedelta
 from harvestingStateMachine import harvestingStateMachine
